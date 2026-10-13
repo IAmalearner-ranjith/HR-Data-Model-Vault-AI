@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HR Application Data Model — connected records</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#fff; --wash:#f1f5f7;
+  --ink:#15303d; --soft:#5b7484; --rule:#d2dde3;
+  --blue:#2d6e8e;
+  --orange:#f47b20; --orange-soft:#fdf0e4;
+  --teal:#00a9ce; --teal-soft:#e4f6fa;
+  --flag:#b5342a;
+  --hit:#ffd79a; --hit-edge:#e8901f; --hop:#fff3df;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--wash);color:var(--ink);
+  font-family:'IBM Plex Sans',-apple-system,'Segoe UI',Roboto,sans-serif;
+  font-size:15px;line-height:1.45;
+}
+.page{max-width:1340px;margin:0 auto;padding:16px 18px 74px}
+
+h1{font-size:21px;font-weight:600;letter-spacing:-.018em;margin:0 0 3px}
+.sub{color:var(--soft);font-size:13.5px;margin:0;max-width:92ch}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 4px;align-items:center}
+button.btn{
+  font:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:3px;
+  cursor:pointer;border:1px solid var(--rule);background:var(--paper);color:var(--ink);
+}
+button.btn:hover{background:#e9eff2}
+button.btn.on{background:var(--ink);border-color:var(--ink);color:#fff}
+button.btn:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
+.hintline{font-size:12.5px;color:var(--soft);margin-left:2px}
+
+/* ---------- canvas ---------- */
+.canvas{position:relative;padding-top:38px}
+#wires{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;overflow:visible}
+.wire{stroke:var(--blue);stroke-width:1.6;fill:none;opacity:.5;transition:opacity .15s,stroke-width .15s}
+.wire.doc{stroke:var(--teal)}
+.wire.live{opacity:1;stroke-width:3.2}
+.wire.miss{stroke:var(--flag);stroke-dasharray:7 5;stroke-width:1.7;opacity:.8}
+.wlabel{font-size:10.5px;fill:var(--soft);font-weight:500}
+.wlabel.miss{fill:var(--flag);font-weight:600;font-size:11px}
+.wbg{fill:var(--wash)}
+
+.grid{
+  position:relative;z-index:1;
+  display:grid;grid-template-columns:.95fr 1.18fr 1.08fr .85fr;
+  column-gap:76px;row-gap:50px;align-items:start;
+}
+.slot-contractor{grid-column:2;grid-row:1}
+.slot-cv{grid-column:3 / span 2;grid-row:1}
+.slot-project{grid-column:1;grid-row:2}
+.slot-role{grid-column:2;grid-row:2}
+.slot-req{grid-column:3;grid-row:2}
+.slot-skill{grid-column:4;grid-row:2}
+
+/* ---------- boxes ---------- */
+.box{background:var(--paper);border:1.6px solid var(--blue);border-radius:4px;overflow:hidden}
+.box.doc{border-color:var(--teal)}
+.box.junction{border-color:var(--orange)}
+.bhead{padding:7px 10px 6px;background:#f7fafb;border-bottom:1px solid var(--rule)}
+.box.doc .bhead{background:var(--teal-soft);border-bottom-color:#c9e9f1}
+.box.junction .bhead{background:var(--orange-soft);border-bottom-color:#f3dcc4}
+.bname{font-size:14px;font-weight:600;margin:0;line-height:1.2}
+.bkind{font-size:10.5px;color:var(--soft);margin:1px 0 0;line-height:1.3}
+.box.junction .bkind{color:#b35c10;font-weight:600}
+
+/* column grid shared by header row and record rows */
+.colhead,.rec{display:grid;align-items:start;column-gap:9px}
+.colhead{
+  padding:5px 10px;background:#fbfdfd;border-bottom:1px solid var(--rule);
+  font-size:10px;font-weight:600;color:var(--soft);letter-spacing:.01em;
+}
+.box.doc .colhead{background:#f3fbfd}
+.box.junction .colhead{background:#fffaf4}
+.rows{list-style:none;margin:0;padding:0}
+.rec{
+  width:100%;text-align:left;padding:5px 10px;
+  border:none;border-bottom:1px solid #eef3f5;background:transparent;
+  font:inherit;cursor:pointer;transition:background .12s;
+}
+.rec:last-child{border-bottom:none}
+.rec:hover{background:#eef4f7}
+.rec:focus-visible{outline:2px solid var(--orange);outline-offset:-2px}
+.cid{
+  font-family:'IBM Plex Mono',ui-monospace,Consolas,monospace;
+  font-size:11.5px;font-weight:600;color:var(--blue);white-space:nowrap;
+}
+.box.doc .cid{color:#00788f}
+.ctxt{font-size:12px;color:var(--soft);line-height:1.35}
+.cptr{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink);white-space:nowrap}
+.cnone{color:#9db0ba;font-style:italic}
+
+/* free text living inside the file — deliberately not a field */
+.cfree{
+  font-size:11.5px;color:#6b7f88;line-height:1.4;font-style:italic;
+  border-left:2px solid #d6e9ef;padding-left:7px;
+}
+.rec.sel .cfree{color:#c6d6dd;border-left-color:#49707f}
+.ev{font-style:normal;font-weight:600;color:#4a5c64;border-bottom:1.5px dotted #b0c4cc}
+.grid.evidence .ev{
+  background:#ffd79a;color:#5c3b06;border-bottom-color:#e8901f;
+  padding:0 3px;border-radius:2px;
+}
+.rec.sel .ev{color:#ffd79a;border-bottom-color:#c88a2a}
+.grid.evidence .rec.sel .ev{background:#ffd79a;color:#5c3b06}
+
+/* highlight states */
+.dimmed .rec{opacity:.28}
+.rec.hop2{opacity:1;background:var(--hop)}
+.rec.hit{opacity:1;background:var(--hit)}
+.rec.sel{opacity:1;background:var(--ink)}
+.rec.sel .cid{color:var(--hit)}
+.rec.sel .ctxt,.rec.sel .cptr{color:#dbe6eb}
+.box.active{box-shadow:0 0 0 2px var(--hit-edge)}
+
+/* ---------- compact footer ---------- */
+.readout{
+  position:fixed;left:0;right:0;bottom:0;z-index:30;
+  background:var(--ink);color:#fff;padding:8px 18px;
+  box-shadow:0 -2px 12px rgba(21,48,61,.22);
+}
+.ro-in{max-width:1340px;margin:0 auto;display:flex;align-items:baseline;gap:12px}
+.ro-id{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:13px;color:var(--hit);flex:none}
+.ro-name{font-size:13px;font-weight:600;flex:none}
+.ro-body{font-size:12.5px;color:#cfdde4;margin:0;flex:1;min-width:0;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ro-body b{color:#fff;font-weight:600}
+.ro-body code{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--hit)}
+.ro-warn{color:#ffb4ac}
+.ro-clear{
+  flex:none;font:inherit;font-size:12px;background:transparent;color:#fff;
+  border:1px solid rgba(255,255,255,.38);padding:3px 10px;border-radius:3px;cursor:pointer;
+}
+.ro-clear:hover{background:rgba(255,255,255,.12)}
+/* ---------- gap callout ---------- */
+.notice{
+  margin:18px 0 0;padding:13px 16px 14px;
+  background:#fdf4f3;border:1px solid #ecd2cf;border-left:3px solid var(--flag);
+  border-radius:3px;
+}
+.notice-h{font-size:13.5px;font-weight:600;margin:0 0 5px;color:var(--flag)}
+.notice-p{font-size:13px;color:#4a3a38;margin:0;max-width:104ch;line-height:1.55}
+.notice-p strong{color:#2a1f1e}
+.notice-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:11px}
+button.btn.side{border-color:#d9c2bf;background:#fff}
+button.btn.side:hover{background:#f6e9e7}
+button.btn.side.on{background:var(--flag);border-color:var(--flag);color:#fff}
+button.btn.known{border-color:#c3d9c9;background:#fff}
+button.btn.known:hover{background:#eaf4ed}
+button.btn.known.on{background:#1d7a4d;border-color:#1d7a4d;color:#fff}
+
+.key{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--soft);margin:10px 0 0}
+.key i{display:inline-block;width:11px;height:11px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+
+@media(max-width:1080px){
+  .grid{grid-template-columns:1fr 1fr;column-gap:30px;row-gap:22px}
+  .slot-contractor{grid-column:1;grid-row:1}.slot-cv{grid-column:2;grid-row:1}
+  .slot-project{grid-column:1;grid-row:2}.slot-role{grid-column:2;grid-row:2}
+  .slot-req{grid-column:1;grid-row:3}.slot-skill{grid-column:2;grid-row:3}
+  #wires{display:none}.canvas{padding-top:0}
+}
+@media(max-width:640px){
+  .grid{grid-template-columns:1fr}
+  .slot-contractor,.slot-cv,.slot-project,.slot-role,.slot-req,.slot-skill{grid-column:1;grid-row:auto}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>HR Application data model — every record, every link, one screen</h1>
+  <p class="sub">Each box is an object laid out as on the slide, holding its real records. Click any record: direct links turn amber, records two hops away turn pale, the connecting line thickens.</p>
+
+  <div class="toolbar">
+    <button class="btn" data-demo="chain">Trace a position to its skills</button>
+    <button class="btn" data-demo="match">How the match really happens — 4 steps</button>
+    <button class="btn" data-demo="shared">One skill, three positions</button>
+    <button class="btn" data-demo="gap">Show the missing link</button>
+    <button class="btn" id="reset">Clear</button>
+    <span class="hintline">Escape clears.</span>
+  </div>
+
+  <div class="canvas">
+    <svg id="wires" aria-hidden="true"></svg>
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <div class="notice">
+    <p class="notice-h">Notice what's missing</p>
+    <p class="notice-p">There is no link between Contractor and Skill. The skills a contractor has live only inside the CV, as free text. <strong>The system knows what projects need in structured form, but what contractors have is buried in PDFs.</strong> That gap is why the manager spends all day reading. Every good answer to this exercise attacks that gap.</p>
+    <div class="notice-btns">
+      <button class="btn known" data-demo="structured">Highlight what the system knows in structured form</button>
+      <button class="btn side" data-demo="buried">Highlight what is buried in PDFs — no Contractor to Skill link</button>
+    </div>
+  </div>
+
+  <div class="key">
+    <span><i style="background:#15303d"></i>selected</span>
+    <span><i style="background:#ffd79a"></i>directly linked</span>
+    <span><i style="background:#fff3df;border:1px solid #e8d7bd"></i>two hops away</span>
+    <span><i style="background:#fbeceb;border:1px dashed #b5342a"></i>relationship that does not exist</span>
+  </div>
+</div>
+
+<div class="readout" id="ro">
+  <div class="ro-in">
+    <span class="ro-id" id="roId">—</span>
+    <span class="ro-name" id="roName">Nothing selected</span>
+    <p class="ro-body" id="roBody">Click a record in any box to see what it connects to.</p>
+    <button class="ro-clear" id="roClear">Clear</button>
+  </div>
+</div>
+
+<script>
+(function(){
+/* ---------------- objects & columns ---------------- */
+var OBJECTS = [
+  {key:'contractor', slot:'slot-contractor', name:'Contractor',
+   kind:'object · Name · Functional Area',
+   cols:['Record','Name','Functional Area'], tpl:'62px 1fr 88px'},
+
+  {key:'cv', slot:'slot-cv', name:'CV Document', css:'doc',
+   kind:'document · a file, not a record',
+   cols:['Document','Contractor','File name','What the CV actually says — free text, not a field'],
+   tpl:'58px 62px 124px 1fr'},
+
+  {key:'project', slot:'slot-project', name:'Project',
+   kind:'object · Name · Dates · Lifecycle State',
+   cols:['Record','Project Name','State'], tpl:'58px 1fr 58px'},
+
+  {key:'role', slot:'slot-role', name:'Project Role',
+   kind:'object · Role Title · Functional Area',
+   cols:['Record','Role Title','Project','Filled by'], tpl:'58px 1fr 54px 60px'},
+
+  {key:'req', slot:'slot-req', name:'Required Skill', css:'junction',
+   kind:'junction object — holds only pointers',
+   cols:['Record','Project Role','Skill'], tpl:'60px 1fr 1fr'},
+
+  {key:'skill', slot:'slot-skill', name:'Skill',
+   kind:'object · Skill Name · Functional Area',
+   cols:['Record','Skill Name'], tpl:'52px 1fr'}
+];
+
+/* c = cells after the ID; k = records this one points at; p = cell indexes rendered as mono pointers */
+var R = {
+  'PRJ-01':{o:'project', n:'Nordic Submission Readiness', c:['Nordic Submission Readiness','Planning'], k:[]},
+
+  'PR-001':{o:'role', n:'Regulatory Publishing Lead',  c:['Regulatory Publishing Lead','PRJ-01','CON-01'], p:[1,2], k:['PRJ-01','CON-01']},
+  'PR-002':{o:'role', n:'Vault Configuration Analyst', c:['Vault Configuration Analyst','PRJ-01','CON-02'], p:[1,2], k:['PRJ-01','CON-02']},
+  'PR-003':{o:'role', n:'Submission QC Reviewer',      c:['Submission QC Reviewer','PRJ-01','CON-03'], p:[1,2], k:['PRJ-01','CON-03']},
+  'PR-004':{o:'role', n:'Submission QC Reviewer',      c:['Submission QC Reviewer','PRJ-01','CON-04'], p:[1,2], k:['PRJ-01','CON-04']},
+  'PR-005':{o:'role', n:'Project Coordinator',         c:['Project Coordinator','PRJ-01','vacant'], p:[1], none:[2], k:['PRJ-01']},
+
+  'RS-001':{o:'req', n:'PR-001 needs SK-01', c:['PR-001','SK-01'], p:[0,1], k:['PR-001','SK-01']},
+  'RS-002':{o:'req', n:'PR-001 needs SK-02', c:['PR-001','SK-02'], p:[0,1], k:['PR-001','SK-02']},
+  'RS-003':{o:'req', n:'PR-001 needs SK-03', c:['PR-001','SK-03'], p:[0,1], k:['PR-001','SK-03']},
+  'RS-004':{o:'req', n:'PR-002 needs SK-03', c:['PR-002','SK-03'], p:[0,1], k:['PR-002','SK-03']},
+  'RS-005':{o:'req', n:'PR-002 needs SK-04', c:['PR-002','SK-04'], p:[0,1], k:['PR-002','SK-04']},
+  'RS-006':{o:'req', n:'PR-003 needs SK-02', c:['PR-003','SK-02'], p:[0,1], k:['PR-003','SK-02']},
+  'RS-007':{o:'req', n:'PR-004 needs SK-02', c:['PR-004','SK-02'], p:[0,1], k:['PR-004','SK-02']},
+
+  'SK-01':{o:'skill', n:'eCTD Publishing',          c:['eCTD Publishing'], k:[]},
+  'SK-02':{o:'skill', n:'EU Regional Requirements', c:['EU Regional Requirements'], k:[]},
+  'SK-03':{o:'skill', n:'Vault RIM Submissions',    c:['Vault RIM Submissions'], k:[]},
+  'SK-04':{o:'skill', n:'Vault Configuration',      c:['Vault Configuration'], k:[]},
+  'SK-05':{o:'skill', n:'Medical Writing',          c:['Medical Writing — unused'], k:[]},
+
+  'CON-01':{o:'contractor', n:'Priya Nair',  c:['Priya Nair','Regulatory'], k:['CV-01']},
+  'CON-02':{o:'contractor', n:'Tomas Berg',  c:['Tomas Berg','Technical'],  k:['CV-02']},
+  'CON-03':{o:'contractor', n:'Anjali Rao',  c:['Anjali Rao','Regulatory'], k:['CV-03']},
+  'CON-04':{o:'contractor', n:'Marcus Hale', c:['Marcus Hale','Regulatory'],k:['CV-04']},
+
+  'CV-01':{o:'cv', n:'Priya_Nair_CV.pdf',
+    c:['CON-01','Priya_Nair_CV.pdf','“Led three <span class="ev">eCTD</span> submissions to EMA under the centralised procedure, 2022–2024.”'],
+    p:[0], free:[2], k:[]},
+  'CV-02':{o:'cv', n:'Tomas_Berg_CV.pdf',
+    c:['CON-02','Tomas_Berg_CV.pdf','“Configured <span class="ev">Vault RIM</span> for two mid-size sponsors; built the submission archive.”'],
+    p:[0], free:[2], k:[]},
+  'CV-03':{o:'cv', n:'Anjali_Rao_CV.pdf',
+    c:['CON-03','Anjali_Rao_CV.pdf','“<span class="ev">QC review</span> of regional dossiers for EU and UK filings.”'],
+    p:[0], free:[2], k:[]},
+  'CV-04':{o:'cv', n:'Marcus_Hale_CV.pdf',
+    c:['CON-04','Marcus_Hale_CV.pdf','“Eight years in submission quality control across three sponsors.”'],
+    p:[0], free:[2], k:[]}
+};
+
+var OBJNAME = {project:'Project', role:'Project Role', req:'Required Skill',
+               skill:'Skill', contractor:'Contractor', cv:'CV Document'};
+
+/* bidirectional adjacency */
+var ADJ={}; Object.keys(R).forEach(function(id){ADJ[id]=[];});
+Object.keys(R).forEach(function(id){
+  R[id].k.forEach(function(t){
+    if(ADJ[id].indexOf(t)<0) ADJ[id].push(t);
+    if(ADJ[t] && ADJ[t].indexOf(id)<0) ADJ[t].push(id);
+  });
+});
+
+/* ---------------- render ---------------- */
+var grid=document.getElementById('grid');
+OBJECTS.forEach(function(ob){
+  var ids=Object.keys(R).filter(function(id){return R[id].o===ob.key;});
+  var box=document.createElement('div');
+  box.className='box '+(ob.css||'')+' '+ob.slot;
+  box.dataset.obj=ob.key;
+
+  var html='<div class="bhead"><p class="bname">'+ob.name+'</p>'+
+           '<p class="bkind">'+ob.kind+'</p></div>';
+  html+='<div class="colhead" style="grid-template-columns:'+ob.tpl+'">'+
+        ob.cols.map(function(c){return '<span>'+c+'</span>';}).join('')+'</div>';
+  html+='<ul class="rows">'+ids.map(function(id){
+    var r=R[id], ptr=r.p||[], none=r.none||[], free=r.free||[];
+    var cells=r.c.map(function(v,ix){
+      var cls = ptr.indexOf(ix)>=0 ? 'cptr'
+              : free.indexOf(ix)>=0 ? 'cfree'
+              : (none.indexOf(ix)>=0 ? 'ctxt cnone' : 'ctxt');
+      return '<span class="'+cls+'">'+v+'</span>';
+    }).join('');
+    return '<li><button class="rec" data-id="'+id+'" style="grid-template-columns:'+ob.tpl+'">'+
+           '<span class="cid">'+id+'</span>'+cells+'</button></li>';
+  }).join('')+'</ul>';
+
+  box.innerHTML=html;
+  grid.appendChild(box);
+});
+
+/* ---------------- wires ---------------- */
+var svg=document.getElementById('wires');
+var WIRES=[
+  {from:'contractor',to:'role', dir:'v', label:'fills'},
+  {from:'contractor',to:'cv',   dir:'h', label:'has',      cls:'doc'},
+  {from:'project',   to:'role', dir:'h', label:'contains'},
+  {from:'role',      to:'req',  dir:'h', label:'demands'},
+  {from:'req',       to:'skill',dir:'h', label:'names'}
+];
+
+function rectOf(key){
+  var el=grid.querySelector('[data-obj="'+key+'"]');
+  var r=el.getBoundingClientRect(), c=svg.getBoundingClientRect();
+  return {l:r.left-c.left, r:r.right-c.left, t:r.top-c.top, b:r.bottom-c.top,
+          cx:r.left-c.left+r.width/2, cy:r.top-c.top+r.height/2};
+}
+
+/* label sits in the gap, on a background chip, so it never lands under a box */
+function label(x,y,text,cls){
+  var w=text.length*5.5+12, h=14;
+  return '<rect class="wbg" x="'+(x-w/2)+'" y="'+(y-h+3)+'" width="'+w+'" height="'+h+'" rx="2"></rect>'+
+         '<text class="wlabel'+(cls?' '+cls:'')+'" x="'+x+'" y="'+y+'" text-anchor="middle">'+text+'</text>';
+}
+
+function drawWires(){
+  if(window.innerWidth<=1080){ svg.innerHTML=''; return; }
+  var c=svg.getBoundingClientRect();
+  svg.setAttribute('viewBox','0 0 '+c.width+' '+c.height);
+  var out='';
+
+  WIRES.forEach(function(w){
+    var a=rectOf(w.from), b=rectOf(w.to), d, lx, ly;
+    if(w.dir==='h'){
+      var L=(a.l<b.l)?a:b, Rg=(a.l<b.l)?b:a;
+      /* both boxes in a row share a top edge, so a fixed offset lands cleanly on both */
+      var y=Math.max(L.t,Rg.t)+34;
+      d='M '+L.r+' '+y+' H '+Rg.l;
+      lx=(L.r+Rg.l)/2; ly=y-6;
+    }else{
+      d='M '+a.cx+' '+a.b+' V '+b.t;
+      lx=a.cx; ly=(a.b+b.t)/2+4;
+    }
+    out+='<path class="wire '+(w.cls||'')+'" data-pair="'+w.from+'|'+w.to+'" d="'+d+'"></path>';
+    out+=label(lx,ly,w.label,null);
+  });
+
+  /* the relationship that was never built: down into the row gap, across, up into Skill.
+     starts right of the "fills" line so the two never cross. */
+  var con=rectOf('contractor'), cv=rectOf('cv'), sk=rectOf('skill');
+  var startX=con.r-22;
+  var gapY=Math.max(con.b,cv.b)+26;
+  out+='<path class="wire miss" data-pair="contractor|skill" d="M '+startX+' '+con.b+
+       ' V '+gapY+' H '+sk.cx+' V '+sk.t+'"></path>';
+  out+=label((startX+sk.cx)/2, gapY-5, 'no relationship exists between Contractor and Skill', 'miss');
+
+  svg.innerHTML=out;
+}
+
+/* ---------------- selection ---------------- */
+var roId=document.getElementById('roId'),roName=document.getElementById('roName'),
+    roBody=document.getElementById('roBody');
+
+var matchStep=0;
+function clear(keepStep){
+  grid.classList.remove('dimmed','evidence');
+  grid.querySelectorAll('.rec').forEach(function(r){r.classList.remove('sel','hit','hop2');});
+  grid.querySelectorAll('.box').forEach(function(b){b.classList.remove('active');});
+  svg.querySelectorAll('.wire').forEach(function(w){w.classList.remove('live');});
+  document.querySelectorAll('.btn.on').forEach(function(b){b.classList.remove('on');});
+  if(!keepStep){
+    matchStep=0;
+    var mb=document.querySelector('[data-demo="match"]');
+    if(mb) mb.textContent='How the match really happens — 4 steps';
+  }
+  roId.textContent='—'; roName.textContent='Nothing selected';
+  roBody.innerHTML='Click a record in any box to see what it connects to.';
+}
+function el(id){return grid.querySelector('.rec[data-id="'+id+'"]');}
+
+function group(ids){
+  var g={};
+  ids.forEach(function(id){ var o=OBJNAME[R[id].o]; (g[o]=g[o]||[]).push(id); });
+  return Object.keys(g).map(function(o){return '<b>'+o+'</b> <code>'+g[o].join(' ')+'</code>';}).join(' · ');
+}
+
+function paint(s){
+  grid.classList.add('dimmed');
+  if(s.sel){var e=el(s.sel); if(e){e.classList.add('sel'); e.closest('.box').classList.add('active');}}
+  s.hit.forEach(function(i){var e=el(i); if(e){e.classList.add('hit'); e.closest('.box').classList.add('active');}});
+  s.hop.forEach(function(i){var e=el(i); if(e) e.classList.add('hop2');});
+  var on={};
+  [].concat(s.sel?[s.sel]:[],s.hit,s.hop).forEach(function(i){on[R[i].o]=true;});
+  svg.querySelectorAll('.wire').forEach(function(w){
+    var p=w.dataset.pair.split('|');
+    if(on[p[0]]&&on[p[1]]&&!w.classList.contains('miss')) w.classList.add('live');
+  });
+}
+
+function select(id){
+  clear();
+  var rec=R[id], hit=ADJ[id].slice(), hop=[];
+  hit.forEach(function(n){ ADJ[n].forEach(function(m){
+    if(m!==id&&hit.indexOf(m)<0&&hop.indexOf(m)<0) hop.push(m);
+  });});
+  paint({sel:id,hit:hit,hop:hop});
+
+  roId.textContent=id;
+  roName.textContent=rec.n;
+  var t='Linked: '+(hit.length?group(hit):'nothing');
+  if(hop.length) t+=' — two hops: '+group(hop);
+
+  if(rec.o==='contractor')
+    t+=' <span class="ro-warn">The path stops at the CV. No Contractor-to-Skill relationship exists, so the system cannot say what this person can do.</span>';
+  if(rec.o==='role'){
+    var sk=ADJ[id].filter(function(n){return R[n].o==='req';})
+                  .map(function(n){return ADJ[n].filter(function(m){return R[m].o==='skill';})[0];})
+                  .filter(Boolean);
+    if(sk.length) t+=' — needs '+sk.map(function(s){return R[s].n;}).join(', ')+'.';
+  }
+  if(rec.o==='req') t+=' — holds no data of its own, only the two IDs.';
+  if(rec.o==='skill') t+=' — one library record demanded by '+ADJ[id].length+' row'+(ADJ[id].length===1?'':'s')+'.';
+
+  roBody.innerHTML=t;
+}
+
+grid.addEventListener('click',function(e){
+  var b=e.target.closest('.rec'); if(b) select(b.dataset.id);
+});
+
+/* ---------------- demos ---------------- */
+var demos={
+  chain:function(btn){
+    clear(); btn.classList.add('on');
+    paint({sel:'PR-001',hit:['RS-001','RS-002','RS-003'],hop:['SK-01','SK-02','SK-03','PRJ-01','CON-01']});
+    roId.textContent='PR-001'; roName.textContent='Regulatory Publishing Lead';
+    roBody.innerHTML='The position holds no skills itself. Three junction rows name it — <code>RS-001 RS-002 RS-003</code> — and each names a Skill. Three hops: <b>position → junction → library</b>.';
+  },
+  shared:function(btn){
+    clear(); btn.classList.add('on');
+    paint({sel:'SK-02',hit:['RS-002','RS-006','RS-007'],hop:['PR-001','PR-003','PR-004']});
+    roId.textContent='SK-02'; roName.textContent='EU Regional Requirements';
+    roBody.innerHTML='One library record demanded by three positions through three separate rows. The other demo shows <code>PR-001</code> demanding three skills. Many on both sides — which is why Required Skill is its own object.';
+  },
+  gap:function(btn){
+    clear(); btn.classList.add('on');
+    paint({sel:'CON-01',hit:['CV-01','PR-001'],hop:['RS-001','RS-002','RS-003','PRJ-01']});
+    grid.classList.add('evidence');
+    svg.querySelectorAll('.wire.miss').forEach(function(w){w.classList.add('live');});
+    roId.textContent='CON-01'; roName.textContent='Priya Nair';
+    roBody.innerHTML='Follow the red dashed line. Priya reaches her CV and her position, but there is no route to the Skill box. <span class="ro-warn">Her eCTD experience is a sentence inside CV-01, not a record.</span>';
+  },
+
+  /* how the staffing decision is really made — demand first, then a human reads */
+  match:function(btn){
+    var was=btn.classList.contains('on');
+    matchStep = was ? (matchStep%4)+1 : 1;
+    clear(true);
+    btn.classList.add('on');
+
+    if(matchStep===1){
+      paint({sel:'PR-001',hit:['RS-001','RS-002','RS-003'],hop:['SK-01','SK-02','SK-03']});
+      roId.textContent='Step 1 of 4';
+      roName.textContent='He starts at the position, not the CV';
+      roBody.innerHTML='The vacancy comes first. <code>PR-001</code> needs eCTD Publishing, EU Regional Requirements and Vault RIM Submissions — three structured rows, handed over instantly. Now he knows <b>what words to look for</b>.';
+    }
+    else if(matchStep===2){
+      paint({sel:null,hit:['CON-01','CON-02','CON-03','CON-04','CV-01','CV-02','CV-03','CV-04'],hop:[]});
+      grid.classList.add('evidence');
+      roId.textContent='Step 2 of 4';
+      roName.textContent='He opens every CV and reads';
+      roBody.innerHTML='No field to filter on, no report to run. Four files here, four hundred in the real system. The only thing he can do is read the last column — <b>which is prose, not data</b>.';
+    }
+    else if(matchStep===3){
+      paint({sel:'CV-01',hit:['CON-01'],hop:[]});
+      grid.classList.add('evidence');
+      svg.querySelectorAll('.wire.miss').forEach(function(w){w.classList.add('live');});
+      roId.textContent='Step 3 of 4';
+      roName.textContent='He spots the phrase — and does the matching in his head';
+      roBody.innerHTML='CV-01 says she led three eCTD submissions. <b>A human reads that and recognises it as SK-01.</b> <span class="ro-warn">The system cannot: follow the red dashed line and there is no route from Contractor to Skill.</span> That recognition happens in his head, nowhere else.';
+    }
+    else{
+      paint({sel:'PR-001',hit:['CON-01'],hop:['CV-01','RS-001','RS-002','RS-003','PRJ-01']});
+      roId.textContent='Step 4 of 4';
+      roName.textContent='He types CON-01 into Filled by — and that is the only record of it';
+      roBody.innerHTML='The link you clicked earlier now exists. But it records <b>the outcome of his reading, not the reasoning</b> — nothing stores that she was picked for eCTD. Next vacancy, somebody reads the same four PDFs again.';
+    }
+    btn.textContent='How the match really happens — step '+matchStep+' of 4';
+  },
+
+  /* the demand side — every record the system can actually query */
+  structured:function(btn){
+    clear(); btn.classList.add('on');
+    var ids=Object.keys(R).filter(function(i){
+      return ['project','role','req','skill'].indexOf(R[i].o)>=0;
+    });
+    paint({sel:null,hit:ids,hop:[]});
+    roId.textContent='18 records';
+    roName.textContent='What projects need';
+    roBody.innerHTML='Project, Project Role, Required Skill and Skill are all structured. Every demand is a row the system can filter, report and count — <code>7 Required Skill rows</code> carry the whole demand side. Contractor and CV Document are dimmed because none of this says anything about people.';
+  },
+
+  /* the supply side — everything useful is inside a file */
+  buried:function(btn){
+    clear(); btn.classList.add('on');
+    var ids=Object.keys(R).filter(function(i){
+      return ['contractor','cv'].indexOf(R[i].o)>=0;
+    });
+    paint({sel:null,hit:ids,hop:[]});
+    grid.classList.add('evidence');
+    svg.querySelectorAll('.wire.miss').forEach(function(w){w.classList.add('live');});
+    roId.textContent='4 people';
+    roName.textContent='What contractors have';
+    roBody.innerHTML='Eight records between them, and not one says what anybody can do — only a name, a functional area and a file. <span class="ro-warn">No Contractor to Skill relationship exists, so the Skill box is unreachable from here.</span> Answering "who knows eCTD Publishing?" means opening four PDFs by hand.';
+  }
+};
+document.querySelectorAll('[data-demo]').forEach(function(b){
+  b.addEventListener('click',function(){demos[b.dataset.demo](b);});
+});
+document.getElementById('reset').addEventListener('click',clear);
+document.getElementById('roClear').addEventListener('click',clear);
+document.addEventListener('keydown',function(e){if(e.key==='Escape')clear();});
+
+/* ---------------- layout ---------------- */
+window.addEventListener('load',drawWires);
+var t; window.addEventListener('resize',function(){clearTimeout(t);t=setTimeout(drawWires,120);});
+drawWires();
+setTimeout(drawWires,300);
+if(document.fonts&&document.fonts.ready) document.fonts.ready.then(drawWires);
+})();
+</script>
+</body>
+</html>
